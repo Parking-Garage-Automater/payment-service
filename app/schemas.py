@@ -1,12 +1,14 @@
 from pydantic import BaseModel
+from typing import Optional
 
 class PaymentRequest(BaseModel):
-    parking_session_id: int
-    plate_number: str
+    plate_number: str  # Ensure this is first
+    parking_session_id: Optional[int] = None
+    source: Optional[str] = None  # Optional field
 
 class PaymentResponse(BaseModel):
     status: str
     message: str
     parking_session_id: int
-    amount: float
+    fee: float
     is_paid: bool

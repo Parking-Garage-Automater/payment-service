@@ -10,6 +10,7 @@ class PaymentTransaction(Base):
     amount = Column(Numeric(10, 2), nullable=False)
     is_paid = Column(Boolean, default=False)
     payment_timestamp = Column(TIMESTAMP, default=datetime.utcnow)
+    payment_source = Column(String(10), default="gate")
 
 class ParkingSession(Base):
     __tablename__ = "parking_sessions"
