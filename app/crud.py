@@ -3,7 +3,6 @@ from sqlalchemy.future import select
 from sqlalchemy.exc import SQLAlchemyError
 from app.models import PaymentTransaction, ParkingSession
 from datetime import datetime
-import math
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -27,13 +26,14 @@ async def calculate_fee(db: AsyncSession, session_id: int):
     return round(fee, 2)
 
 
-async def create_payment(db: AsyncSession, session_id: int, amount: float, payment_source: str = "gate"):
+async def create_payment(db: AsyncSession, session_id: int, amount: float, payment_source: str = "gate", note: str = None):
     try:
         new_payment = PaymentTransaction(
             parking_session_id=session_id,
             amount=amount,
             is_paid=False,
-            payment_source=payment_source
+            payment_source=payment_source,
+            note=note
         )
         db.add(new_payment)
         await db.commit()
@@ -42,6 +42,7 @@ async def create_payment(db: AsyncSession, session_id: int, amount: float, payme
     except SQLAlchemyError as e:
         await db.rollback()
         raise e
+
 
 async def get_payment(db: AsyncSession, session_id: int):
     result = await db.execute(
@@ -95,6 +96,48 @@ async def get_payment_status(db: AsyncSession, session_id: int):
 
     return payment is not None
 
+async def get_all_payments_and_sessions(db: AsyncSession, plate_number: str):
+    logging.info(f"Fetching all payment transactions and parking sessions for plate: {plate_number}")
 
+    # Fetch parking sessions
+    session_results = await db.execute(
+        select(ParkingSession).where(ParkingSession.license_plate == plate_number)
+    )
+    sessions = session_results.scalars().all()
 
+    if not sessions:
+        logging.warning(f"No parking sessions found for plate: {plate_number}")
+        return {"history": []}  # ✅ Always return a consistent structure
 
+    # Fetch payments linked to these sessions
+    session_ids = [s.id for s in sessions]
+    payment_results = await db.execute(
+        select(PaymentTransaction).where(PaymentTransaction.parking_session_id.in_(session_ids))
+    )
+    payments = payment_results.scalars().all()
+
+    # Group payments by session ID
+    payments_by_session = {s.id: [] for s in sessions}  # Ensure all sessions have an entry
+    for payment in payments:
+        payments_by_session[payment.parking_session_id].append({
+            "payment_id": payment.id,
+            "amount": float(payment.amount),
+            "is_paid": payment.is_paid,
+            "payment_timestamp": payment.payment_timestamp.isoformat(),
+            "payment_source": payment.payment_source,
+            "note":  payment.note
+        })
+
+    # Construct the final merged response
+    history = []
+    for session in sessions:
+        history.append({
+            "session_id": session.id,
+            "license_plate": session.license_plate,
+            "entry_timestamp": session.entry_timestamp.isoformat(),
+            "exit_timestamp": session.exit_timestamp.isoformat() if session.exit_timestamp else None,
+            "is_active": session.is_active,
+            "payments": payments_by_session.get(session.id, [])  # Attach payments or empty list if none
+        })
+
+    return {"history": history}  # ✅ Always return a properly formatted response

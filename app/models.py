@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Numeric, Boolean, TIMESTAMP, String
+from sqlalchemy import Column, Integer, Numeric, Boolean, TIMESTAMP, String, Text
 from datetime import datetime
 from app.database import Base
 
@@ -11,6 +11,7 @@ class PaymentTransaction(Base):
     is_paid = Column(Boolean, default=False)
     payment_timestamp = Column(TIMESTAMP, default=datetime.utcnow)
     payment_source = Column(String(10), default="gate")
+    note = Column(Text, nullable=True)
 
 class ParkingSession(Base):
     __tablename__ = "parking_sessions"
