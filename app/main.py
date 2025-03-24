@@ -11,7 +11,7 @@ from app.services import get_payment_plan_status  # Import API function
 import logging
 
 logging.basicConfig(level=logging.INFO)
-app = FastAPI(title="Payment Service", version="1.0.0")
+app = FastAPI(title="Payment Service", version="1.0.1")
 
 @app.on_event("startup")
 async def on_startup():
@@ -23,65 +23,74 @@ async def process_payment(request: PaymentRequest, db: AsyncSession = Depends(ge
     try:
         logging.info(f"Received payment request for plate: {request.plate_number}")
 
-        is_plan_active = True
+        is_plan_active = False  # Hardcoded for now
         logging.info(f"DEBUG MODE: Payment plan status for {request.plate_number}: {is_plan_active}")
 
+        # Determine parking session ID
         parking_session_id = request.parking_session_id
-        if request.source == "website" or parking_session_id is None:
+        if request.source == "website" or not parking_session_id:
             logging.info(f"Fetching active session for plate: {request.plate_number}")
             parking_session_id = await get_active_parking_session(db, request.plate_number)
-            logging.info(f"Fetched parking session ID: {parking_session_id}")
-            if parking_session_id is None:
+            if not parking_session_id:
                 logging.error(f"No active session found for plate: {request.plate_number}")
                 raise HTTPException(status_code=404, detail="No active parking session found for this plate number.")
 
-        if is_plan_active and request.source != "website":
-            note = f"User of vehicle {request.plate_number} tried to pay via gate but has an active plan."
-            logging.info(note)
+        # Calculate fee
+        fee = await calculate_fee(db, parking_session_id)
+        if fee is None:
+            raise HTTPException(status_code=404, detail="Vehicle already exited.")
 
-            await create_payment(db, parking_session_id, 0.0, "gate", note)
-
-            updated_payment = await mark_payment_successful(db, parking_session_id)
-            if updated_payment:
-                return PaymentResponse(
-                    status="success",
-                    message="Exit allowed under active payment plan.",
-                    parking_session_id=parking_session_id,
-                    fee=0.0,
-                    is_paid=True
-                )
-            else:
-                raise HTTPException(status_code=500, detail="Failed to mark payment as successful.")
-
-        is_already_paid = await get_payment_status(db, parking_session_id)
-        if is_already_paid:
+        # Check if already paid
+        if await get_payment_status(db, parking_session_id):
             note = f"Payment already made for session {parking_session_id}. No fee charged."
             logging.info(note)
-
             await create_payment(db, parking_session_id, 0.0, request.source or "gate", note)
+
             return PaymentResponse(
                 status="already_paid",
-                message="Payment has already been made for this session before. No fee charged.",
+                message="Payment has already been made for this session. No fee charged.",
                 parking_session_id=parking_session_id,
                 fee=0.0,
                 is_paid=True
             )
 
-        fee = await calculate_fee(db, parking_session_id)
-        if fee is None:
-            raise HTTPException(status_code=404, detail="Parking session not found or already exited.")
+        # Handle active plan logic
+        if is_plan_active:
+            if request.source == "website":
+                note = (
+                    f"User of vehicle {request.plate_number} tried to pay via website, "
+                    "but has an active payment plan. Payment is handled automatically at the gate."
+                )
+                logging.info(note)
+                raise HTTPException(
+                    status_code=400,
+                    detail="Payment is already covered by the subscription plan."
+                )
+            else:  # source is gate
+                note = (
+                    f"User of vehicle {request.plate_number} exited via gate with an active payment plan. "
+                    "No manual payment required — covered by the plan."
+                )
+                logging.info(note)
+                await create_payment(db, parking_session_id, fee, "gate", note)
 
-        if is_plan_active and request.source == "website":
-            note = f"User of vehicle {request.plate_number} tried to pay via website but has an active plan."
-            logging.info(note)
-            raise HTTPException(status_code=400, detail="Payment is already covered by the subscription plan.")
+                if await mark_payment_successful(db, parking_session_id):
+                    return PaymentResponse(
+                        status="success",
+                        message="Exit allowed under active payment plan.",
+                        parking_session_id=parking_session_id,
+                        fee=fee,
+                        is_paid=True
+                    )
+                else:
+                    raise HTTPException(status_code=500, detail="Failed to mark payment as successful.")
 
+        # Fallback: Normal payment flow
         note = f"User of vehicle {request.plate_number} made a payment of {fee} via {request.source or 'gate'}."
         await create_payment(db, parking_session_id, fee, request.source or "gate", note)
 
         if request.source == "website":
-            updated_payment = await mark_payment_successful(db, parking_session_id)
-            if updated_payment:
+            if await mark_payment_successful(db, parking_session_id):
                 return PaymentResponse(
                     status="success",
                     message="Payment successful via website.",
@@ -94,7 +103,7 @@ async def process_payment(request: PaymentRequest, db: AsyncSession = Depends(ge
 
         return PaymentResponse(
             status="failed",
-            message="You did not have an active payment plan. Please activate your payment plan or pay through our website.",
+            message="No active payment plan. Please activate your plan or pay via website.",
             parking_session_id=parking_session_id,
             fee=fee,
             is_paid=False
@@ -104,7 +113,8 @@ async def process_payment(request: PaymentRequest, db: AsyncSession = Depends(ge
         raise http_error
     except Exception as e:
         logging.error(f"Unexpected error: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
 
 @app.get("/api/v1/history/", response_model=dict)
 async def get_payment_and_session_history(
