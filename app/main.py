@@ -7,7 +7,7 @@ from app.crud import create_payment, mark_payment_successful, calculate_fee, get
 from app.schemas import PaymentRequest, PaymentResponse
 from fastapi import Query
 from app.crud import get_all_payments_and_sessions
-from app.services import get_payment_plan_status  # Import API function
+from app.services import get_payment_plan_status
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -23,7 +23,7 @@ async def process_payment(request: PaymentRequest, db: AsyncSession = Depends(ge
     try:
         logging.info(f"Received payment request for plate: {request.plate_number}")
 
-        is_plan_active = False  # Hardcoded for now
+        is_plan_active = await get_payment_plan_status(request.plate_number)
         logging.info(f"DEBUG MODE: Payment plan status for {request.plate_number}: {is_plan_active}")
 
         # Determine parking session ID
