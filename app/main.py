@@ -18,7 +18,7 @@ async def on_startup():
     await init_db()
 
 
-@app.post("/api/v1/payments/", response_model=PaymentResponse)
+@app.post("/ps/api/v1/payments/", response_model=PaymentResponse)
 async def process_payment(request: PaymentRequest, db: AsyncSession = Depends(get_db)):
     try:
         logging.info(f"Received payment request for plate: {request.plate_number}")
@@ -116,7 +116,7 @@ async def process_payment(request: PaymentRequest, db: AsyncSession = Depends(ge
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
-@app.get("/api/v1/history/", response_model=dict)
+@app.get("/ps/api/v1/history/", response_model=dict)
 async def get_payment_and_session_history(
         plate_number: str = Query(..., description="License plate number to fetch payment and parking history."),
         db: AsyncSession = Depends(get_db)
