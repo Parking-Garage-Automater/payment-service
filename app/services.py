@@ -4,7 +4,7 @@ import os
 USER_SERVICE_URL = os.getenv("USER_SERVICE_URL")
 
 async def get_payment_plan_status(plate_number: str) -> bool:
-    url = f"{USER_SERVICE_URL}/api/users/{plate_number}"
+    url = f"{USER_SERVICE_URL}us/api/users/{plate_number}"
 
     try:
         async with httpx.AsyncClient() as client:
