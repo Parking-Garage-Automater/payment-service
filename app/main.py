@@ -11,7 +11,11 @@ from app.services import get_payment_plan_status
 import logging
 
 logging.basicConfig(level=logging.INFO)
-app = FastAPI(title="Payment Service", version="1.0.1")
+app = FastAPI(
+    title="Payment Service",
+    version="1.0.1",
+    root_path="/ps"
+)
 
 @app.on_event("startup")
 async def on_startup():
