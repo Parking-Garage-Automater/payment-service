@@ -96,16 +96,20 @@ async def get_payment_status(db: AsyncSession, session_id: int):
 
     return payment is not None
 
-async def get_all_payments_and_sessions(db: AsyncSession, plate_number: str):
-    logging.info(f"Fetching all payment transactions and parking sessions for plate: {plate_number}")
+async def get_all_payments_and_sessions(db: AsyncSession, plate_number: str = None):
+    if plate_number:
+        logging.info(f"Fetching all payment transactions and parking sessions for plate: {plate_number}")
+        session_results = await db.execute(
+            select(ParkingSession).where(ParkingSession.license_plate == plate_number)
+        )
+    else:
+        logging.info("Fetching all payment transactions and parking sessions")
+        session_results = await db.execute(select(ParkingSession))
 
-    session_results = await db.execute(
-        select(ParkingSession).where(ParkingSession.license_plate == plate_number)
-    )
     sessions = session_results.scalars().all()
 
     if not sessions:
-        logging.warning(f"No parking sessions found for plate: {plate_number}")
+        logging.warning(f"No parking sessions found.")
         return {"history": []}
 
     session_ids = [s.id for s in sessions]
@@ -122,7 +126,7 @@ async def get_all_payments_and_sessions(db: AsyncSession, plate_number: str):
             "is_paid": payment.is_paid,
             "payment_timestamp": payment.payment_timestamp.isoformat(),
             "payment_source": payment.payment_source,
-            "note":  payment.note
+            "note": payment.note
         })
 
     history = []

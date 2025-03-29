@@ -4,7 +4,7 @@ from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import init_db, get_db
 from app.crud import create_payment, mark_payment_successful, calculate_fee, get_active_parking_session, get_payment_status
-from app.schemas import PaymentRequest, PaymentResponse
+from app.schemas import PaymentRequest, PaymentResponse, HistoryResponse
 from fastapi import Query
 from app.crud import get_all_payments_and_sessions
 from app.services import get_payment_plan_status
@@ -120,7 +120,7 @@ async def process_payment(request: PaymentRequest, db: AsyncSession = Depends(ge
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
-@app.get("/api/v1/history/", response_model=dict)
+@app.get("/api/v1/history/", response_model=HistoryResponse)
 async def get_payment_and_session_history(
         plate_number: str = Query(..., description="License plate number to fetch payment and parking history."),
         db: AsyncSession = Depends(get_db)
@@ -139,6 +139,24 @@ async def get_payment_and_session_history(
     except Exception as e:
         logging.error(f"Unexpected error while fetching history: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
+@app.get("/api/v1/history/all/", response_model=HistoryResponse)
+async def get_all_payment_and_session_history(db: AsyncSession = Depends(get_db)):
+    try:
+        logging.info("Fetching all payment and parking session history")
+        history = await get_all_payments_and_sessions(db)
+
+        if not history["history"]:
+            logging.warning("No records found.")
+            raise HTTPException(status_code=404, detail="No records found.")
+
+        return history
+    except HTTPException as http_error:
+        raise http_error
+    except Exception as e:
+        logging.error(f"Unexpected error while fetching all history: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
 
 
 if __name__ == "__main__":

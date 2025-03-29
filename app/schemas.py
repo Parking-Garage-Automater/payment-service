@@ -1,5 +1,24 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
+
+class PaymentDetail(BaseModel):
+    payment_id: int
+    amount: float
+    is_paid: bool
+    payment_timestamp: str
+    payment_source: str
+    note: str
+
+class ParkingSessionDetail(BaseModel):
+    session_id: int
+    license_plate: str
+    entry_timestamp: str
+    exit_timestamp: Optional[str] = None
+    is_active: bool
+    payments: List[PaymentDetail]
+
+class HistoryResponse(BaseModel):
+    history: List[ParkingSessionDetail]
 
 class PaymentRequest(BaseModel):
     plate_number: str  # Ensure this is first
