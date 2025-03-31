@@ -9,6 +9,8 @@ from fastapi import Query
 from app.crud import get_all_payments_and_sessions
 from app.services import get_payment_plan_status
 import logging
+from fastapi.middleware.cors import CORSMiddleware
+
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI(
@@ -17,10 +19,25 @@ app = FastAPI(
     root_path="/ps"
 )
 
+# CORS settings
+origins = [
+    "http://localhost",
+    "http://localhost:8000",
+    "http://localhost:3000",
+    "https://iot.nielstesting.nl",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.on_event("startup")
 async def on_startup():
     await init_db()
-
 
 @app.post("/api/v1/payments/", response_model=PaymentResponse)
 async def process_payment(request: PaymentRequest, db: AsyncSession = Depends(get_db)):
